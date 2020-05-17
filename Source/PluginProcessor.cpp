@@ -101,10 +101,10 @@ void TouchyPitcherAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     
     m_SoundTouch.setSampleRate(sampleRate);
     m_SoundTouch.setPitchSemiTones(0.0f);
-    m_SoundTouch.setChannels(1);
+    m_SoundTouch.setChannels(m_MaxNumChannels);
     m_SoundTouch.flush();
     
-    m_ProcessedBuffer.resize(samplesPerBlock);
+    m_ProcessedBuffer.resize(samplesPerBlock * m_MaxNumChannels);
 }
 
 void TouchyPitcherAudioProcessor::releaseResources()
@@ -154,28 +154,32 @@ void TouchyPitcherAudioProcessor::processBlock (AudioBuffer<float>& buffer, Midi
     
     
     // Params we'll be using throughout the block
+    int numChannels = jmin(jmin(totalNumInputChannels, totalNumOutputChannels), m_MaxNumChannels);
     int numSamples = buffer.getNumSamples();
     float pitch = m_ValueTreeState.getRawParameterValue("PITCH")->load();
     
+    // Prepare samples for SoundTouch
+    AudioDataConverters::interleaveSamples(buffer.getArrayOfReadPointers(), m_ProcessedBuffer.data(), numSamples, numChannels);
+    
     // Set SoundTouch pitch and input samples
-    // Only grabbing 1 channel
-    // TODO: Stereo interleaving
     m_SoundTouch.setPitchSemiTones(pitch);
-    m_SoundTouch.putSamples(buffer.getReadPointer(0), numSamples);
+    m_SoundTouch.putSamples(m_ProcessedBuffer.data(), numSamples);
     
     // Output
     if (m_SoundTouch.numSamples() >= numSamples)
     {
         // Receive processed output if SoundTouch has enough samples
-        int numOutputSamples = 0;
-        numOutputSamples = m_SoundTouch.receiveSamples(m_ProcessedBuffer.data(), numSamples);
+        m_SoundTouch.receiveSamples(m_ProcessedBuffer.data(), numSamples);
 
-        // Copy to all channels
-        for (int channel = 0; channel < totalNumInputChannels; ++channel)
-        {
-            // auto* channelData = buffer.getWritePointer (channel);
-            buffer.copyFrom(channel, 0, m_ProcessedBuffer.data(), numSamples);
-        }
+        // Write samples to output buffer
+        AudioDataConverters::deinterleaveSamples(m_ProcessedBuffer.data(), buffer.getArrayOfWritePointers(), numSamples, numChannels);
+        
+        // Copy to all channels (for mono)
+        // for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        // {
+        //     // auto* channelData = buffer.getWritePointer (channel);
+        //     buffer.copyFrom(channel, 0, m_ProcessedBuffer.data(), numSamples);
+        // }
     }
     else
     {

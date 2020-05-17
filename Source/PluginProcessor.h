@@ -68,6 +68,8 @@ private:
     soundtouch::SoundTouch m_SoundTouch;
     std::vector<float> m_ProcessedBuffer;
     AudioProcessorValueTreeState m_ValueTreeState;
+    
+    const int m_MaxNumChannels {2};
 
     //==============================================================================
     AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
